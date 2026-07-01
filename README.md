@@ -2,7 +2,7 @@
 
 A gamified **Red Team vs Blue Team** cybersecurity simulator. The Red Team launches attacks; the Blue Team deploys defenses that **detect** and **prevent** them. A scoring engine tracks the duel and decides a winner.
 
-> ⚠️ **Everything is simulated.** IDAPS runs entirely against a *virtual* network model — no real scanning, no real network traffic, and no real exploitation. Attacks are probabilistic models resolved against the defensive posture of fake hosts: safe, legal, and reproducible for a demo.
+>  **Everything is simulated.** IDAPS runs entirely against a *virtual* network model — no real scanning, no real network traffic, and no real exploitation. Attacks are probabilistic models resolved against the defensive posture of fake hosts: safe, legal, and reproducible for a demo.
 
 ---
 
