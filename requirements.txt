@@ -1,0 +1,5 @@
+# IDAPS web dashboard dependencies.
+# The engine + terminal version need NONE of these (pure standard library).
+# These are only required for the web UI (Phase 3/4).
+fastapi==0.115.6
+uvicorn==0.34.0

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>IDAPS — Red Team vs Blue Team Simulator</title>
+<!--
+  STANDALONE BUILD. Everything (engine + UI) is in this one file.
+  Just double-click this file to open it in a browser. No Python, no server,
+  no internet, no installation. Works completely offline.
+-->
+<style>
+:root{
+  --bg:#060a14;--bg2:#0a1020;--panel:#0d1426;--panel2:#111c33;--border:#1d3358;
+  --ink:#dbe7ff;--muted:#6c7da6;--red:#ff3b5c;--blue:#33b1ff;--green:#22e39a;
+  --yellow:#ffd23f;--cyan:#27e6e6;--shadow:0 6px 24px rgba(0,0,0,.5);--radius:10px;
+  --mono:"Consolas","SF Mono","Roboto Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;
+  background:
+    linear-gradient(rgba(39,230,230,.035) 1px,transparent 1px) 0 0/40px 40px,
+    linear-gradient(90deg,rgba(39,230,230,.035) 1px,transparent 1px) 0 0/40px 40px,
+    radial-gradient(1100px 650px at 75% -10%,#10243f 0%,var(--bg) 60%);
+  color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;font-size:14px}
+body{display:flex;flex-direction:column;height:100vh}
+.topbar{display:flex;align-items:center;gap:24px;padding:12px 22px;
+  background:linear-gradient(90deg,var(--bg2),#0a1830);border-bottom:1px solid var(--cyan);
+  box-shadow:0 0 20px rgba(39,230,230,.12)}
+.brand{display:flex;flex-direction:column;line-height:1.1}
+.logo{font-weight:800;font-size:1.5rem;letter-spacing:3px;font-family:var(--mono);
+  background:linear-gradient(90deg,var(--red),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:0 0 22px rgba(39,230,230,.4)}
+.tagline{color:var(--cyan);font-size:.74rem;letter-spacing:1px;opacity:.7}
+.scoreboard{margin-left:auto;display:flex;align-items:center;gap:18px}
+.score{display:flex;flex-direction:column;align-items:center;min-width:120px}
+.score .label{font-size:.7rem;letter-spacing:1px;color:var(--muted)}
+.score .value{font-size:2rem;font-weight:800;font-variant-numeric:tabular-nums}
+.score.red .value{color:var(--red)} .score.blue .value{color:var(--blue)}
+.vs{color:var(--muted);font-weight:700}
+.status{padding:6px 14px;border-radius:999px;background:var(--panel);border:1px solid var(--border);
+  color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:1px}
+.layout{flex:1;display:grid;grid-template-columns:280px 1fr 300px;gap:14px;padding:14px;min-height:0}
+.panel{display:flex;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;padding-right:2px}
+.panel::-webkit-scrollbar{width:8px}
+.panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px}
+.panel.right{overflow:hidden}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 16px;box-shadow:var(--shadow)}
+.card.grow{flex:1;display:flex;flex-direction:column;min-height:0}
+.card h2{margin:0 0 12px;font-size:.82rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--muted)}
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mode-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--panel2);color:var(--ink);cursor:pointer;text-align:left;
+  transition:border-color .15s,transform .1s,background .15s}
+.mode-btn:hover{border-color:#3a4f80;transform:translateY(-1px)}
+.mode-btn.active{border-color:var(--cyan);background:linear-gradient(180deg,#06222b,var(--panel2));box-shadow:inset 0 0 0 1px var(--cyan),0 0 12px rgba(39,230,230,.2)}
+.mode-title{font-weight:700;font-size:.9rem} .mode-sub{font-size:.72rem;color:var(--muted)}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:10px}
+label small{opacity:.7}
+input,select{width:100%;margin-top:4px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg2);color:var(--ink);font-size:.9rem}
+input:focus,select:focus{outline:none;border-color:var(--blue)}
+.btn-row{display:flex;gap:8px;margin-top:4px}
+.btn{flex:1;padding:10px 14px;border-radius:9px;border:1px solid var(--border);background:var(--panel2);
+  color:var(--ink);font-weight:700;cursor:pointer;transition:filter .15s,transform .1s}
+.btn:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:linear-gradient(90deg,var(--cyan),#1bc6c6);border-color:transparent;color:#04101f;
+  box-shadow:0 0 14px rgba(39,230,230,.35)}
+.legend{list-style:none;margin:0;padding:0}
+.legend li{display:flex;align-items:center;gap:10px;padding:4px 0;font-size:.85rem}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block}
+.dot.success{background:var(--red)}.dot.prevented{background:var(--blue)}
+.dot.detected{background:var(--yellow)}.dot.failed{background:var(--muted)}
+.stage{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow),inset 0 0 60px rgba(39,230,230,.04);overflow:hidden;min-height:0;display:flex;flex-direction:column}
+#map{flex:1;width:100%;min-height:0;display:block}
+.tick-banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);padding:6px 16px;border-radius:999px;
+  background:rgba(6,10,20,.85);border:1px solid var(--cyan);font-size:.85rem;color:var(--cyan);white-space:nowrap;
+  font-family:var(--mono);box-shadow:0 0 14px rgba(39,230,230,.25)}
+.action-bar{flex:0 0 auto;border-top:1px solid var(--cyan);background:rgba(8,14,26,.98);
+  padding:12px 16px;max-height:48%;overflow-y:auto}
+.action-head{font-weight:800;font-size:1rem;margin-bottom:10px}
+.action-head.red{color:var(--red)} .action-head.blue{color:var(--blue)}
+.action-step{margin-bottom:10px}
+.step-label{display:block;font-size:.74rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px}
+.chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 11px;border-radius:6px;border:1px solid var(--border);background:var(--panel2);color:var(--ink);
+  font-size:.82rem;cursor:pointer;transition:border-color .12s,background .12s,box-shadow .12s;display:flex;gap:6px;align-items:center;
+  font-family:var(--mono)}
+.chip:hover{border-color:var(--cyan);box-shadow:0 0 8px rgba(39,230,230,.25)}
+.chip.sel{border-color:var(--green);background:rgba(34,227,154,.14);box-shadow:0 0 10px rgba(34,227,154,.3)}
+.chip:disabled{opacity:.35;cursor:not-allowed}
+.chip-meta{font-size:.68rem;opacity:.8}
+.chip-meta.sev-high{color:var(--red)} .chip-meta.sev-medium{color:var(--yellow)}
+.action-confirm{display:flex;align-items:center;gap:12px;margin-top:8px;border-top:1px solid var(--border);padding-top:10px}
+.summary{flex:1;font-size:.84rem;color:var(--muted)}
+.action-confirm .btn{flex:0 0 auto;min-width:150px}
+.feed{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1}
+.feed-item{padding:7px 10px;margin-bottom:6px;border-radius:8px;font-size:.82rem;border-left:3px solid var(--muted);
+  background:var(--panel2);line-height:1.3;display:flex;flex-direction:column;gap:2px}
+.feed-item.success{border-left-color:var(--red)}.feed-item.prevented{border-left-color:var(--blue)}
+.feed-item.detected{border-left-color:var(--yellow)}.feed-item.failed{border-left-color:var(--muted)}
+.feed-sub{color:var(--muted);font-size:.74rem}
+.result-overlay{position:fixed;inset:0;background:rgba(4,8,18,.78);display:flex;align-items:center;justify-content:center;z-index:50}
+.result-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:32px 40px;
+  text-align:center;box-shadow:var(--shadow);min-width:320px}
+.result-card h2{margin:0 0 10px;font-size:1.8rem}
+.result-card p{color:var(--muted);margin:0 0 20px}
+.win-red{color:var(--red)}.win-blue{color:var(--blue)}.win-tie{color:var(--yellow)}
+.credits{padding:10px 22px;border-top:1px solid var(--border);background:var(--bg2);font-size:.76rem;
+  color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}
+.credits-title{font-weight:700;color:var(--ink)}
+.hidden{display:none!important}
+.seed-help{font-size:.74rem;color:var(--muted);line-height:1.4;margin:-4px 0 8px;
+  border-left:2px solid var(--cyan);padding-left:8px}
+.seed-help b{color:var(--cyan)}
+.seed-presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.seed-presets-label{font-size:.72rem;color:var(--muted)}
+.seed-chip{font-family:var(--mono);font-size:.78rem;padding:3px 9px;border-radius:6px;
+  border:1px solid var(--border);background:var(--panel2);color:var(--cyan);cursor:pointer}
+.seed-chip:hover{border-color:var(--cyan)}
+@media(max-width:1100px){.layout{grid-template-columns:1fr;grid-auto-rows:min-content}.stage{min-height:420px}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">IDAPS</span>
+    <span class="tagline">Intrusion Detection &amp; Prevention Simulator</span></div>
+  <div class="scoreboard">
+    <div class="score red"><span class="label">RED · attacker</span><span class="value" id="redScore">0</span></div>
+    <div class="vs">VS</div>
+    <div class="score blue"><span class="label">BLUE · defender</span><span class="value" id="blueScore">0</span></div>
+  </div>
+  <div class="status" id="statusBadge">idle</div>
+</header>
+
+<div class="layout">
+  <aside class="panel left">
+    <section class="card">
+      <h2>Game Mode</h2>
+      <div class="mode-grid" id="modeGrid">
+        <button class="mode-btn active" data-mode="ai_vs_ai"><span class="mode-title">AI vs AI</span><span class="mode-sub">watch bots battle</span></button>
+        <button class="mode-btn" data-mode="player_red"><span class="mode-title">You = Red</span><span class="mode-sub">attack vs AI defender</span></button>
+        <button class="mode-btn" data-mode="player_blue"><span class="mode-title">You = Blue</span><span class="mode-sub">defend vs AI attacker</span></button>
+        <button class="mode-btn" data-mode="pvp"><span class="mode-title">Player vs Player</span><span class="mode-sub">two players, one screen</span></button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Match Settings</h2>
+      <label>Seed <small>(blank = random)</small><input type="number" id="seedInput" placeholder="random" /></label>
+      <div class="seed-help">A <b>seed</b> is a number that fixes the random outcomes. Same seed + same moves = the exact same match every time (great for a repeatable demo). Blank = a fresh random match.</div>
+      <div class="seed-presets">
+        <span class="seed-presets-label">Try a seed:</span>
+        <button class="seed-chip" data-seed="7">7</button>
+        <button class="seed-chip" data-seed="42">42</button>
+        <button class="seed-chip" data-seed="123">123</button>
+        <button class="seed-chip" data-seed="2024">2024</button>
+        <button class="seed-chip" data-seed="">random</button>
+      </div>
+      <label>Ticks (length)<input type="number" id="ticksInput" value="20" min="1" max="100" /></label>
+      <label>AI speed<select id="speedInput">
+        <option value="1000">Slow</option><option value="600" selected>Normal</option>
+        <option value="300">Fast</option><option value="60">Turbo</option></select></label>
+      <div class="btn-row">
+        <button id="startBtn" class="btn primary">▶ Start</button>
+        <button id="stopBtn" class="btn" disabled>■ Stop</button>
+      </div>
+    </section>
+    <section class="card">
+      <h2>Legend</h2>
+      <ul class="legend">
+        <li><span class="dot success"></span> Attack succeeded (Red scores)</li>
+        <li><span class="dot prevented"></span> Prevented — Blue +20</li>
+        <li><span class="dot detected"></span> Detected — Blue +10</li>
+        <li><span class="dot failed"></span> Failed</li>
+      </ul>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <canvas id="map"></canvas>
+    <div class="tick-banner" id="tickBanner">Pick a mode and press Start</div>
+    <div class="action-bar hidden" id="actionBar">
+      <div class="action-head" id="actionHead">Your move</div>
+      <div class="action-step">
+        <span class="step-label">1 · Choose <span id="actionKindWord">action</span></span>
+        <div class="chip-row" id="optionChips"></div>
+      </div>
+      <div class="action-step">
+        <span class="step-label">2 · Choose target host (or click it on the map)</span>
+        <div class="chip-row" id="targetChips"></div>
+      </div>
+      <div class="action-confirm">
+        <span id="actionSummary" class="summary">Select an action and a target…</span>
+        <button class="btn primary" id="confirmMove" disabled>Confirm move</button>
+      </div>
+    </div>
+  </main>
+
+  <aside class="panel right">
+    <section class="card grow"><h2>Event Feed</h2><ul class="feed" id="feed"></ul></section>
+  </aside>
+</div>
+
+<div class="result-overlay hidden" id="resultOverlay">
+  <div class="result-card">
+    <h2 id="resultTitle">—</h2><p id="resultDetail"></p>
+    <button class="btn primary" id="closeResult">Play again</button>
+  </div>
+</div>
+
+<footer class="credits">
+  <span class="credits-title">IDAPS — University Project · Group Members:</span>
+  <span class="credits-names">
+    Abdul Sammi (274-2024) · Syed Hassan Abbas (405-2024)
+  </span>
+</footer>
+
+<script>
+"use strict";
+/* ===========================================================================
+   IDAPS ENGINE — pure JavaScript port of the Python engine. Runs in-browser,
+   fully offline. Same rules: prevention > detection, severity multipliers,
+   stealth & survival bonuses, six attack vectors, thirteen defenses.
+   =========================================================================== */
+
+// ---- seeded RNG (mulberry32) so a seed reproduces a match -----------------
+function makeRng(seed){
+  let s = (seed === null || seed === undefined || isNaN(seed))
+    ? Math.floor(Math.random()*2**31) : (seed>>>0);
+  return function(){
+    s |= 0; s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---- attack vectors (Red) --------------------------------------------------
+const VECTORS = {
+  "DDoS":          {targets:["web","network"],     base:0.55, detDiff:0.2,  pts:10, sev:"medium", desc:"Flood a host to knock its services offline."},
+  "Brute Force":   {targets:["auth","user"],       base:0.5,  detDiff:0.35, pts:10, sev:"medium", desc:"Repeatedly guess credentials to gain access."},
+  "SQL Injection": {targets:["web","database"],    base:0.6,  detDiff:0.5,  pts:15, sev:"high",   desc:"Inject malicious SQL to read/alter a database."},
+  "Phishing":      {targets:["user","auth"],       base:0.65, detDiff:0.6,  pts:15, sev:"high",   desc:"Trick a user into giving up credentials."},
+  "MITM":          {targets:["network","auth"],    base:0.5,  detDiff:0.7,  pts:15, sev:"high",   desc:"Intercept traffic between hosts."},
+  "XSS":           {targets:["web","user"],        base:0.55, detDiff:0.45, pts:10, sev:"medium", desc:"Inject malicious script into a web page."},
+};
+
+// ---- defenses (Blue): counters + prevent/detect chance --------------------
+const DEFENSES = {
+  "Firewall":             {counters:["DDoS","MITM"],          prevent:0.5,  detect:0.4},
+  "Rate Limiting":        {counters:["DDoS","Brute Force"],   prevent:0.6,  detect:0.5},
+  "MFA":                  {counters:["Brute Force","Phishing"],prevent:0.75, detect:0.2},
+  "Account Lockout":      {counters:["Brute Force"],          prevent:0.65, detect:0.6},
+  "WAF":                  {counters:["SQL Injection","XSS"],  prevent:0.6,  detect:0.6},
+  "Input Validation":     {counters:["SQL Injection","XSS"],  prevent:0.7,  detect:0.3},
+  "Patching":             {counters:["SQL Injection"],        prevent:0.5,  detect:0.1},
+  "CSP":                  {counters:["XSS"],                  prevent:0.65, detect:0.2},
+  "Email Filter":         {counters:["Phishing"],             prevent:0.55, detect:0.6},
+  "User Training":        {counters:["Phishing"],             prevent:0.5,  detect:0.4},
+  "TLS Encryption":       {counters:["MITM"],                 prevent:0.8,  detect:0.1},
+  "Network Segmentation": {counters:["MITM","DDoS"],          prevent:0.45, detect:0.3},
+  "IDS":                  {counters:["DDoS","Brute Force","SQL Injection","Phishing","MITM","XSS"], prevent:0.0, detect:0.45},
+};
+
+const SEV_MULT = {low:1.0, medium:1.0, high:1.5};
+const PTS = {detect:10, prevent:20, stealth:5, survival:2};
+
+// ---- network ---------------------------------------------------------------
+function defaultNetwork(){
+  return {hosts:[
+    {hostname:"web-01", cats:["web","auth"],     compromised:false, online:true, defenses:[]},
+    {hostname:"web-02", cats:["web","user"],     compromised:false, online:true, defenses:[]},
+    {hostname:"db-01",  cats:["database"],        compromised:false, online:true, defenses:[]},
+    {hostname:"mail-01",cats:["network","user"], compromised:false, online:true, defenses:[]},
+    {hostname:"gw-01",  cats:["network","auth"], compromised:false, online:true, defenses:[]},
+  ]};
+}
+
+// ---- resolver: prevention -> success -> detection -------------------------
+function resolveAttack(vectorName, host, rng, sb){
+  const v = VECTORS[vectorName];
+  const defs = host.defenses.filter(d => DEFENSES[d].counters.includes(vectorName));
+  const res = {vector:vectorName, target:host.hostname, success:false, detected:false, prevented:false, note:"", red:0, blue:0};
+
+  if(!host.online){ res.note="host offline"; return res; }
+
+  // 1. prevention
+  for(const d of defs){
+    const pc = DEFENSES[d].prevent;
+    if(pc>0 && rng()<pc){
+      res.prevented=true; res.blue+=PTS.prevent; sb.blue+=PTS.prevent;
+      sb.log.push(`${d} prevented ${vectorName} @ ${host.hostname}`);
+      res.note=`blocked by ${d}`;
+      detectionCheck(res, defs, v, rng, sb);
+      return res;
+    }
+  }
+  // 2. success
+  let chance = v.base;
+  for(const d of defs) chance -= DEFENSES[d].prevent*0.3;
+  chance = Math.max(0.05, Math.min(0.95, chance));
+  if(rng()<chance){
+    res.success=true;
+    const gained = Math.round(v.pts*SEV_MULT[v.sev]);
+    res.red+=gained; sb.red+=gained;
+    sb.log.push(`${vectorName} succeeded @ ${host.hostname}`);
+    if(vectorName==="DDoS") host.online=false; else host.compromised=true;
+  }
+  // 3. detection
+  detectionCheck(res, defs, v, rng, sb);
+  // stealth bonus
+  if(res.success && !res.detected){ res.red+=PTS.stealth; sb.red+=PTS.stealth; res.note="stealthy"; }
+  return res;
+}
+
+function detectionCheck(res, defs, v, rng, sb){
+  if(res.detected) return;
+  let best=0, who=null;
+  for(const d of defs){
+    let dc = DEFENSES[d].detect * (1 - v.detDiff*0.5);
+    if(dc>best){ best=dc; who=d; }
+  }
+  if(who && rng()<best){ res.detected=true; res.blue+=PTS.detect; sb.blue+=PTS.detect; sb.log.push(`${who} detected ${v===undefined?'':res.vector}`); }
+}
+
+// ---- bots ------------------------------------------------------------------
+function redBotMove(net, rng){
+  const online = net.hosts.filter(h=>h.online);
+  if(!online.length) return null;
+  const fresh = online.filter(h=>!h.compromised);
+  const host = (fresh.length?fresh:online)[Math.floor(rng()*(fresh.length?fresh.length:online.length))];
+  const viable = Object.keys(VECTORS).filter(n => VECTORS[n].targets.some(c=>host.cats.includes(c)));
+  const list = viable.length?viable:Object.keys(VECTORS);
+  const vector = list[Math.floor(rng()*list.length)];
+  return {vector, target:host.hostname};
+}
+function blueBotMove(net, rng){
+  const online = net.hosts.filter(h=>h.online);
+  if(!online.length) return null;
+  let host = online[0];
+  for(const h of online) if(h.defenses.length<host.defenses.length) host=h;
+  const have = new Set(host.defenses);
+  const cand = Object.keys(DEFENSES).filter(n=>!have.has(n));
+  const list = cand.length?cand:Object.keys(DEFENSES);
+  const defense = list[Math.floor(rng()*list.length)];
+  return {defense, target:host.hostname};
+}
+
+// ---- game ------------------------------------------------------------------
+function newGame(seed, maxTicks){
+  return {net:defaultNetwork(), rng:makeRng(seed), sb:{red:0,blue:0,log:[]},
+          tick:0, maxTicks:maxTicks||20, finished:false, winner:null, compromiseWin:0.8};
+}
+function hostByName(net,name){ return net.hosts.find(h=>h.hostname===name)||null; }
+function compromisedCount(net){ return net.hosts.filter(h=>h.compromised).length; }
+
+function gameStep(g, redAction, blueAction){
+  g.tick++;
+  const ev = {tick:g.tick, attack:null, defenseDeployed:null, defenseHost:null, notes:[]};
+
+  const blue = blueAction || blueBotMove(g.net, g.rng);
+  const red  = redAction  || redBotMove(g.net, g.rng);
+
+  // apply blue
+  if(blue && blue.defense){
+    const h = hostByName(g.net, blue.target);
+    if(h && !h.defenses.includes(blue.defense)){
+      h.defenses.push(blue.defense);
+      ev.defenseDeployed=blue.defense; ev.defenseHost=blue.target;
+    } else if(h){ ev.notes.push(`${blue.target} already has ${blue.defense}`); }
+  }
+  const before = compromisedCount(g.net);
+  // apply red
+  if(red && red.vector){
+    const h = hostByName(g.net, red.target);
+    if(h) ev.attack = resolveAttack(red.vector, h, g.rng, g.sb);
+  } else { ev.notes.push("Red had no valid move"); }
+  const after = compromisedCount(g.net);
+
+  if(after===before && (!ev.attack || !ev.attack.success)){
+    g.sb.blue+=PTS.survival; ev.notes.push("Blue survival bonus");
+  }
+  ev.redTotal=g.sb.red; ev.blueTotal=g.sb.blue;
+
+  // end check
+  if(compromisedCount(g.net)/g.net.hosts.length >= g.compromiseWin){ g.finished=true; g.winner="Red"; }
+  else if(g.tick>=g.maxTicks){ g.finished=true; g.winner = g.sb.red>g.sb.blue?"Red":g.sb.blue>g.sb.red?"Blue":"Tie"; }
+  return ev;
+}
+
+/* ===========================================================================
+   UI LAYER
+   =========================================================================== */
+const el = id => document.getElementById(id);
+const ui = {
+  redScore:el("redScore"), blueScore:el("blueScore"), status:el("statusBadge"),
+  modeGrid:el("modeGrid"), seed:el("seedInput"), ticks:el("ticksInput"), speed:el("speedInput"),
+  start:el("startBtn"), stop:el("stopBtn"), canvas:el("map"), banner:el("tickBanner"), feed:el("feed"),
+  actionBar:el("actionBar"), actionHead:el("actionHead"), actionKindWord:el("actionKindWord"),
+  optionChips:el("optionChips"), targetChips:el("targetChips"), actionSummary:el("actionSummary"),
+  confirmMove:el("confirmMove"), overlay:el("resultOverlay"), resultTitle:el("resultTitle"),
+  resultDetail:el("resultDetail"), closeResult:el("closeResult"),
+};
+const ctx = ui.canvas.getContext("2d");
+const COLORS = {success:"#ff3b5c",prevented:"#33b1ff",detected:"#ffd23f",failed:"#6c7da6",
+  green:"#22e39a",node:"#0a1426",nodeBorder:"#1d3358",ink:"#dbe7ff",muted:"#6c7da6",red:"#ff3b5c",cyan:"#27e6e6"};
+
+let game=null, mode="ai_vs_ai", running=false, nodes={}, flashes=[], timer=null;
+let pending={team:null,option:null,target:null};
+let resolveMove=null;  // promise resolver used while waiting for a human move
+
+function outcomeKind(a){ if(!a)return"failed"; if(a.prevented)return"prevented";
+  if(a.success)return"success"; if(a.detected)return"detected"; return"failed"; }
+
+// ---- canvas ----
+function resizeCanvas(){
+  const r=ui.canvas.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  ui.canvas.width=r.width*dpr; ui.canvas.height=r.height*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0); layoutNodes();
+}
+window.addEventListener("resize",resizeCanvas);
+function layoutNodes(){
+  const names=Object.keys(nodes); if(!names.length)return;
+  const r=ui.canvas.getBoundingClientRect();
+  // Hosts in a single horizontal row across the top third; attacker centered below.
+  const n=names.length, margin=Math.max(70,r.width*0.10);
+  const usable=r.width-margin*2, step= n>1 ? usable/(n-1) : 0;
+  const rowY=r.height*0.30;
+  names.forEach((name,i)=>{
+    nodes[name].x = n>1 ? margin+step*i : r.width/2;
+    nodes[name].y = rowY;
+  });
+}
+function attackerOrigin(){ const r=ui.canvas.getBoundingClientRect(); return {x:r.width/2,y:r.height*0.80}; }
+function hexA(hex,al){ return hex+Math.round(Math.max(0,Math.min(1,al))*255).toString(16).padStart(2,"0"); }
+
+function draw(){
+  const r=ui.canvas.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height);
+  const o=attackerOrigin();
+  ctx.strokeStyle=hexA(COLORS.nodeBorder,0.5); ctx.lineWidth=1;
+  for(const n of Object.keys(nodes)){ ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(nodes[n].x,nodes[n].y); ctx.stroke(); }
+  flashes=flashes.filter(f=>f.life>0);
+  for(const f of flashes){
+    const t=nodes[f.target]; if(!t)continue;
+    ctx.strokeStyle=hexA(COLORS[f.kind],Math.min(1,f.life/40)); ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(o.x,o.y); ctx.lineTo(t.x,t.y); ctx.stroke();
+    const p=1-f.life/40, px=o.x+(t.x-o.x)*p, py=o.y+(t.y-o.y)*p;
+    ctx.fillStyle=COLORS[f.kind]; ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2); ctx.fill();
+    f.life--;
+  }
+  for(const n of Object.keys(nodes)) drawNode(nodes[n],n);
+  drawAttacker(o);
+  requestAnimationFrame(draw);
+}
+function drawNode(node,name){
+  const h=node.host; ctx.save();
+  let ring=COLORS.nodeBorder;
+  if(!h.online)ring=COLORS.muted; else if(h.compromised)ring=COLORS.success; else if(h.defenses.length)ring=COLORS.green;
+  if(pending.team && node.selectable){ ctx.shadowColor=pending.team==="red"?COLORS.red:COLORS.prevented;
+    ctx.shadowBlur=pending.target===name?26:12; }
+  ctx.fillStyle=COLORS.node;
+  ctx.strokeStyle=pending.target===name?(pending.team==="red"?COLORS.red:COLORS.prevented):ring;
+  ctx.lineWidth=pending.target===name?4:3;
+  ctx.beginPath(); ctx.arc(node.x,node.y,32,0,Math.PI*2); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0;
+  ctx.fillStyle=COLORS.ink; ctx.font="bold 13px sans-serif"; ctx.textAlign="center";
+  ctx.fillText(h.hostname,node.x,node.y-42);
+  ctx.font="10px sans-serif";
+  if(!h.online){ctx.fillStyle=COLORS.muted;ctx.fillText("OFFLINE",node.x,node.y+3);}
+  else if(h.compromised){ctx.fillStyle=COLORS.success;ctx.fillText("PWNED",node.x,node.y+3);}
+  else{ctx.fillStyle=COLORS.green;ctx.fillText("SECURE",node.x,node.y+3);}
+  if(h.defenses.length){ctx.fillStyle=COLORS.green;ctx.fillText("⛨ "+h.defenses.length,node.x,node.y+50);}
+  ctx.restore();
+}
+function drawAttacker(o){
+  ctx.save(); ctx.fillStyle="#2a1420"; ctx.strokeStyle=COLORS.success; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(o.x,o.y,28,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=COLORS.success; ctx.font="bold 12px sans-serif"; ctx.textAlign="center";
+  ctx.fillText("RED",o.x,o.y+4); ctx.restore();
+}
+ui.canvas.addEventListener("click",e=>{
+  if(!pending.team)return;
+  const r=ui.canvas.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top;
+  for(const n of Object.keys(nodes)){ const nd=nodes[n];
+    if(nd.selectable && (x-nd.x)**2+(y-nd.y)**2<=34*34){ selectTarget(n); return; } }
+});
+
+// ---- node sync ----
+function buildNodes(net){ nodes={}; for(const h of net.hosts) nodes[h.hostname]={x:0,y:0,host:h,selectable:false}; layoutNodes(); }
+function syncNodes(net){ for(const h of net.hosts) if(nodes[h.hostname]) nodes[h.hostname].host=h; }
+
+// ---- scoreboard / feed ----
+function setScore(r,b){ ui.redScore.textContent=r; ui.blueScore.textContent=b; }
+function addFeed(ev){
+  const li=document.createElement("li"); const a=ev.attack; let kind="failed", main, sub="";
+  if(a){ kind=outcomeKind(a);
+    const tag=a.prevented?"PREVENTED":(a.success&&a.detected)?"SUCCESS (detected)":a.success?"SUCCESS (stealth)":a.detected?"FAILED (detected)":"FAILED";
+    main=`T${ev.tick}  ${a.vector} → ${a.target}  [${tag}]`;
+  } else main=`T${ev.tick}  (no attack)`;
+  if(ev.defenseDeployed) sub=`Blue deployed ${ev.defenseDeployed} @ ${ev.defenseHost}`;
+  li.className="feed-item "+kind;
+  li.innerHTML=`<span>${main}</span>`+(sub?`<span class="feed-sub">${sub}</span>`:"");
+  ui.feed.insertBefore(li,ui.feed.firstChild);
+  while(ui.feed.children.length>80) ui.feed.removeChild(ui.feed.lastChild);
+}
+
+// ---- human action panel ----
+function showActionPanel(team){
+  pending={team,option:null,target:null};
+  ui.actionBar.classList.remove("hidden");
+  ui.actionHead.className="action-head "+team;
+  ui.actionHead.textContent= team==="red"
+    ? "RED's move — pick an attack and a target" : "BLUE's move — pick a defense and where to deploy it";
+  ui.actionKindWord.textContent= team==="red"?"attack":"defense";
+  ui.optionChips.innerHTML="";
+  const opts = team==="red"?Object.keys(VECTORS):Object.keys(DEFENSES);
+  for(const name of opts){
+    const chip=document.createElement("button"); chip.className="chip option";
+    const meta = team==="red"
+      ? `<span class="chip-meta sev-${VECTORS[name].sev}">${VECTORS[name].sev} · +${VECTORS[name].pts}</span>`
+      : `<span class="chip-meta">${Math.round(DEFENSES[name].prevent*100)}% block</span>`;
+    chip.innerHTML=`<span>${name}</span>${meta}`;
+    chip.title= team==="red"?VECTORS[name].desc:("Counters: "+DEFENSES[name].counters.join(", "));
+    chip.onclick=()=>selectOption(name,chip);
+    ui.optionChips.appendChild(chip);
+  }
+  ui.targetChips.innerHTML="";
+  for(const n of Object.keys(nodes)){
+    const h=nodes[n].host; nodes[n].selectable=h.online;
+    const chip=document.createElement("button"); chip.className="chip target"; chip.dataset.host=n;
+    chip.disabled=!h.online;
+    chip.innerHTML=`<span>${n}</span><span class="chip-meta">${h.online?(h.compromised?"pwned":"secure"):"offline"}</span>`;
+    chip.onclick=()=>selectTarget(n);
+    ui.targetChips.appendChild(chip);
+  }
+  updateSummary();
+  requestAnimationFrame(resizeCanvas);  // map area shrank; re-fit nodes
+}
+function hideActionPanel(){ ui.actionBar.classList.add("hidden");
+  for(const n of Object.keys(nodes)) nodes[n].selectable=false; pending={team:null,option:null,target:null};
+  requestAnimationFrame(resizeCanvas); }  // map area grew back; re-fit nodes
+function selectOption(name,chip){ pending.option=name;
+  ui.optionChips.querySelectorAll(".chip").forEach(c=>c.classList.remove("sel")); chip.classList.add("sel"); updateSummary(); }
+function selectTarget(name){ pending.target=name;
+  ui.targetChips.querySelectorAll(".chip").forEach(c=>c.classList.toggle("sel",c.dataset.host===name)); updateSummary(); }
+function updateSummary(){
+  const verb=pending.team==="red"?"Attack":"Defend";
+  if(pending.option&&pending.target){ ui.actionSummary.textContent=`${verb}: ${pending.option} → ${pending.target}`; ui.confirmMove.disabled=false; }
+  else { ui.actionSummary.textContent="Select an action and a target…"; ui.confirmMove.disabled=true; }
+}
+ui.confirmMove.onclick=()=>{
+  if(!pending.option||!pending.target||!resolveMove)return;
+  const team=pending.team;
+  const move = team==="red"?{vector:pending.option,target:pending.target}:{defense:pending.option,target:pending.target};
+  const r=resolveMove; resolveMove=null; hideActionPanel(); ui.banner.textContent="Resolving…"; r(move);
+};
+
+// wait for a human move (returns a Promise that confirmMove resolves)
+function awaitHumanMove(team){
+  showActionPanel(team);
+  ui.banner.textContent=`Tick ${game.tick+1}: ${team.toUpperCase()}'s turn`;
+  return new Promise(res=>{ resolveMove=res; });
+}
+
+// ---- match driver ----
+async function runMatch(){
+  const humanRed = mode==="player_red"||mode==="pvp";
+  const humanBlue= mode==="player_blue"||mode==="pvp";
+  const delay = parseInt(ui.speed.value,10)||600;
+
+  while(running && !game.finished){
+    let red=null, blue=null;
+    if(humanBlue){ blue=await awaitHumanMove("blue"); if(!running)break; }
+    if(humanRed){ red=await awaitHumanMove("red"); if(!running)break; }
+
+    const ev=gameStep(game, red, blue);
+    syncNodes(game.net); setScore(ev.redTotal,ev.blueTotal); addFeed(ev);
+    if(ev.attack){ flashes.push({target:ev.attack.target,kind:outcomeKind(ev.attack),life:44});
+      ui.banner.textContent=`Tick ${ev.tick}: ${ev.attack.vector} → ${ev.attack.target}`; }
+    else ui.banner.textContent=`Tick ${ev.tick}`;
+
+    if(!humanRed && !humanBlue) await sleep(delay);
+  }
+  if(game.finished) endMatch();
+}
+function sleep(ms){ return new Promise(r=>{ timer=setTimeout(r,ms); }); }
+
+function startMatch(){
+  if(running)return;
+  ui.feed.innerHTML=""; ui.overlay.classList.add("hidden"); setScore(0,0);
+  const seedRaw=ui.seed.value.trim();
+  const seed= seedRaw===""?null:parseInt(seedRaw,10);
+  const ticks=parseInt(ui.ticks.value,10)||20;
+  game=newGame(seed,ticks); buildNodes(game.net);
+  running=true; ui.start.disabled=true; ui.stop.disabled=false;
+  ui.status.textContent={ai_vs_ai:"AI vs AI",player_red:"You = Red",player_blue:"You = Blue",pvp:"Player vs Player"}[mode];
+  ui.banner.textContent="Match started";
+  runMatch();
+}
+function stopMatch(){
+  running=false; if(timer)clearTimeout(timer);
+  if(resolveMove){ const r=resolveMove; resolveMove=null; r(null); }
+  hideActionPanel(); ui.start.disabled=false; ui.stop.disabled=true;
+  ui.status.textContent="stopped"; ui.banner.textContent="Match stopped";
+}
+function endMatch(){
+  running=false; hideActionPanel(); ui.start.disabled=false; ui.stop.disabled=true;
+  ui.status.textContent="finished";
+  ui.resultTitle.textContent=`${game.winner} wins`;
+  ui.resultTitle.className= game.winner==="Red"?"win-red":game.winner==="Blue"?"win-blue":"win-tie";
+  ui.resultDetail.textContent=`Final score — Red ${game.sb.red} vs Blue ${game.sb.blue}. `+
+    `Hosts compromised: ${compromisedCount(game.net)}/${game.net.hosts.length}.`;
+  ui.overlay.classList.remove("hidden");
+  ui.banner.textContent=`Match over — ${game.winner} wins`;
+}
+
+// ---- wire up ----
+ui.modeGrid.onclick=e=>{ const b=e.target.closest(".mode-btn"); if(!b||running)return;
+  mode=b.dataset.mode; ui.modeGrid.querySelectorAll(".mode-btn").forEach(x=>x.classList.toggle("active",x===b)); };
+ui.start.onclick=startMatch;
+ui.stop.onclick=stopMatch;
+ui.closeResult.onclick=()=>ui.overlay.classList.add("hidden");
+document.querySelectorAll(".seed-chip").forEach(b=>{
+  b.onclick=()=>{ if(running)return; ui.seed.value=b.dataset.seed; };
+});
+
+resizeCanvas();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
